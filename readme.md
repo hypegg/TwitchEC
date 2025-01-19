@@ -51,17 +51,7 @@ Before running this project, ensure you have the following installed:
 
 ## Usage
 
-1. Install the dependencies
-   ```bash
-   npm install
-  	```
-
-   Or use the provided batch script:
-   ```bash
-   install-dependencies.bat
-   ```
-
-2. Start the application:
+1. Start the application:
    ```bash
    npm start
    ```
@@ -71,7 +61,7 @@ Before running this project, ensure you have the following installed:
    start.bat
    ```
 
-3. Reset the application state if needed:
+2. Reset the application state if needed:
    ```bash
    reset.bat
    ```

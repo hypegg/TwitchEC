@@ -2,6 +2,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const chalk = require('chalk');
 const AIHelper = require('../utils/ai-helper');
+const MemoryManager = require('../utils/memory-manager');
+const logger = require('../utils/logger');
 
 /**
  * Handles user statistics, emote tracking, and milestone management
@@ -31,6 +33,18 @@ class StatsHandler {
         this.aiHelper = new AIHelper(bot.config);
         this.cache = new Map();
         this.cacheTimeout = 60000; // 1 minute
+        this.memoryManager = new MemoryManager({
+            maxHeapUsage: 0.9,
+            cleanupThreshold: 0.8,
+            staleDataAge: parseInt(process.env.STALE_DATA_AGE, 10) || 30 * 24 * 60 * 60 * 1000,
+            minRuntimeBeforeCleanup: 30 * 60 * 1000 // 30 minutes minimum runtime
+        });
+        
+        // Use consolidated memory monitoring with custom intervals
+        this.memoryManager.setupMemoryMonitoring({
+            logInterval: 10 * 60 * 1000,  // Log every 10 minutes
+            checkInterval: 30 * 60 * 1000  // Check growth every 30 minutes
+        });
     }
 
     /**
@@ -79,8 +93,18 @@ class StatsHandler {
                 this.userStats = parsedData;
             }
             
+            // Only clean stale data if we have a significant amount of entries
+            if (this.userStats && Object.keys(this.userStats).length > 1000) {
+                const beforeCount = Object.keys(this.userStats).length;
+                await this.performCleanup();
+                const afterCount = Object.keys(this.userStats).length;
+                if (beforeCount !== afterCount) {
+                    logger.info(`Removed ${beforeCount - afterCount} stale entries during load`);
+                }
+            }
+            
             this.isLoaded = true;
-            console.log(chalk.green('✓ Statistics loaded successfully'));
+            logger.success('Statistics loaded successfully');
         } catch (error) {
             if (error.code === 'ENOENT') {
                 await fs.mkdir(path.dirname(this.bot.config.files.database), { recursive: true });
@@ -129,9 +153,9 @@ class StatsHandler {
      */
     async freeMemory() {
         if (!this.saveQueue.isPending()) {
+            await this.memoryManager.freeMemory(this.userStats);
             this.userStats = null;
             this.isLoaded = false;
-            console.debug(chalk.green('✓ Statistics unloaded from memory'));
         }
     }
 
@@ -410,6 +434,33 @@ class StatsHandler {
         this.userStats[username].emotes[emote] = (this.userStats[username].emotes[emote] || 0) + 1;
         this.userStats[username].platforms[platform] = (this.userStats[username].platforms[platform] || 0) + 1;
         this.userStats[username].lastSeen = Date.now();
+    }
+
+    /**
+     * Checks memory usage and performs cleanup if necessary
+     */
+    async checkMemoryUsage() {
+        this.memoryManager.logMemoryUsage();
+        
+        if (this.memoryManager.needsCleanup()) {
+            await this.performCleanup();
+        }
+    }
+
+    /**
+     * Performs data cleanup to free up memory
+     */
+    async performCleanup() {
+        if (!this.userStats) return;
+        
+        const cleanedCount = await this.memoryManager.performCleanup(
+            this.userStats,
+            (userData) => this.memoryManager.isStale(userData.lastSeen)
+        );
+        
+        if (cleanedCount > 0) {
+            await this.saveStats();
+        }
     }
 }
 

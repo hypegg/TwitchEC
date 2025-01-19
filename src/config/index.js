@@ -98,6 +98,13 @@ const config = {
             process.env.MILESTONE_VALUES.split(',').map(Number) : 
             [100, 500, 1000, 5000, 10000, 50000],
         messages: {}
+    },
+
+    memory: {
+        maxHeapUsage: parseFloat(process.env.MAX_HEAP_USAGE) || 0.9,
+        cleanupThreshold: parseFloat(process.env.CLEANUP_THRESHOLD) || 0.8,
+        staleDataAge: parseInt(process.env.STALE_DATA_AGE, 10) || 30 * 24 * 60 * 60 * 1000,
+        checkInterval: parseInt(process.env.MEMORY_CHECK_INTERVAL, 10) || 5 * 60 * 1000
     }
 };
 
@@ -262,6 +269,20 @@ function validateConfig(config) {
     // Add AI configuration to config object if enabled
     if (config.features.enableAiMessages) {
         config.ai = AI_CONFIG;
+    }
+
+    // Validate memory settings
+    if (config.memory.maxHeapUsage < 0 || config.memory.maxHeapUsage > 1) {
+        throw new Error('MAX_HEAP_USAGE must be between 0 and 1');
+    }
+    if (config.memory.cleanupThreshold < 0 || config.memory.cleanupThreshold > 1) {
+        throw new Error('CLEANUP_THRESHOLD must be between 0 and 1');
+    }
+    if (config.memory.staleDataAge < 0) {
+        throw new Error('STALE_DATA_AGE must be a positive number');
+    }
+    if (config.memory.checkInterval < 1000) {
+        throw new Error('MEMORY_CHECK_INTERVAL must be at least 1000ms');
     }
 
     return config;

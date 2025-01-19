@@ -6,6 +6,18 @@ const DEFAULT_URLS = {
     FFZ: 'https://api.frankerfacez.com/v1'
 };
 
+const AI_CONFIG = {
+    openai: {
+        apiKey: process.env.OPENAI_API_KEY,
+        apiEndpoint: process.env.OPENAI_API_ENDPOINT,
+        model: process.env.OPENAI_MODEL,
+        maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS, 10),
+        temperature: parseFloat(process.env.OPENAI_TEMPERATURE),
+        systemPrompt: process.env.OPENAI_SYSTEM_PROMPT,
+        userPromptTemplate: process.env.OPENAI_USER_PROMPT_TEMPLATE
+    }
+};
+
 const config = {
     // Bot Authentication Settings
     username: process.env.TWITCH_USERNAME,          // Required: Twitch bot username
@@ -171,6 +183,86 @@ function validateConfig(config) {
         const defaultMsg = `atingiu ${milestone} emotes! Parabéns! 🎉`;
         config.milestones.messages[milestone] = process.env[msgKey] || defaultMsg;
     });
+
+    // Validate AI configuration when enabled
+    if (config.features.enableAiMessages) {
+        const requiredAiSettings = [
+            'apiKey',
+            'apiEndpoint',
+            'model',
+            'maxTokens',
+            'temperature',
+            'systemPrompt',
+            'userPromptTemplate'
+        ];
+
+        const missingAiSettings = requiredAiSettings.filter(key => !AI_CONFIG.openai[key]);
+        if (missingAiSettings.length) {
+            throw new Error(`Missing required AI settings: ${missingAiSettings.join(', ')}`);
+        }
+
+        // Validate numeric values
+        if (isNaN(AI_CONFIG.openai.maxTokens)) {
+            throw new Error('OPENAI_MAX_TOKENS must be a valid number');
+        }
+        if (isNaN(AI_CONFIG.openai.temperature) || AI_CONFIG.openai.temperature < 0 || AI_CONFIG.openai.temperature > 2) {
+            throw new Error('OPENAI_TEMPERATURE must be a valid number between 0 and 2');
+        }
+    }
+
+    // Validate intervals
+    if (isNaN(config.intervals.autoSave) || config.intervals.autoSave < 1000) {
+        throw new Error('AUTO_SAVE_INTERVAL must be a valid number >= 1000');
+    }
+    if (isNaN(config.intervals.emoteRefresh) || config.intervals.emoteRefresh < 1000) {
+        throw new Error('EMOTE_REFRESH_INTERVAL must be a valid number >= 1000');
+    }
+
+    // Validate retry settings
+    if (isNaN(config.retry.attempts) || config.retry.attempts < 1) {
+        throw new Error('RETRY_ATTEMPTS must be a valid number >= 1');
+    }
+    if (isNaN(config.retry.delay) || config.retry.delay < 0) {
+        throw new Error('RETRY_DELAY must be a valid number >= 0');
+    }
+    if (isNaN(config.retry.maxDelay) || config.retry.maxDelay < config.retry.delay) {
+        throw new Error('RETRY_MAX_DELAY must be a valid number >= RETRY_DELAY');
+    }
+
+    // Validate rate limits
+    const apiServices = ['SEVENTV', 'BTTV', 'FFZ'];
+    apiServices.forEach(service => {
+        const rateLimitKey = `${service}_RATE_LIMIT`;
+        const rateLimit = parseInt(process.env[rateLimitKey], 10);
+        if (isNaN(rateLimit) || rateLimit < 1) {
+            throw new Error(`${rateLimitKey} must be a valid number >= 1`);
+        }
+    });
+
+    // Validate milestone values
+    if (!Array.isArray(config.milestones.values) || config.milestones.values.length === 0) {
+        throw new Error('MILESTONE_VALUES must be a comma-separated list of numbers');
+    }
+    config.milestones.values.forEach(milestone => {
+        if (isNaN(milestone) || milestone < 1) {
+            throw new Error('Each milestone value must be a valid number >= 1');
+        }
+    });
+
+    // Validate feature settings
+    if (isNaN(config.features.maxTopUsers) || config.features.maxTopUsers < 1) {
+        throw new Error('MAX_TOP_USERS must be a valid number >= 1');
+    }
+
+    // Validate required format strings
+    if (!config.format.topUser || !config.format.topUser.includes('{username}')) {
+        throw new Error('TOP_USER_FORMAT must include at least {username} variable');
+    }
+
+    // Add AI configuration to config object if enabled
+    if (config.features.enableAiMessages) {
+        config.ai = AI_CONFIG;
+    }
 
     return config;
 }

@@ -1,4 +1,4 @@
 @echo off
 echo Starting Twitch Emote Counter...
-npm start
+node --expose-gc main.js
 pause
